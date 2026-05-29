@@ -1167,6 +1167,40 @@ function submitCode(){
 }
 
 function showReveal(i){
+  const kp=getRouteKps()[i];
+
+  document.getElementById('scan-wrap').style.display='block';
+  document.getElementById('rv-content').classList.remove('show');
+
+  showScreen('screen-reveal');
+
+  setTimeout(async ()=>{
+    document.getElementById('scan-wrap').style.display='none';
+    document.getElementById('rv-tag').textContent=kp.name;
+    document.getElementById('rv-caption').textContent=kp.hint||'Meklējiet šajā apkārtnē!';
+
+    const img=document.getElementById('rv-img');
+    const ph=document.getElementById('rv-ph');
+    const imgSrc=await getOfflineImageSrc(kp.img);
+
+    if(imgSrc){
+      img.src=imgSrc;
+      img.style.display='block';
+      ph.style.display='none';
+    }else{
+      img.style.display='none';
+      ph.style.display='flex';
+    }
+
+    document.getElementById('rv-found-btn').textContent=getDone().includes(i)?'✓ Jau atrasts':'✓ Fragments atrasts!';
+    document.getElementById('rv-content').classList.add('show');
+
+    const sl=document.querySelector('.scanline');
+    sl.style.animation='none';
+    sl.offsetHeight;
+    sl.style.animation='scandown 2s linear 1';
+  },1600);
+}
 
 function markFound(){
   const done=getDone();
