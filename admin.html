@@ -929,19 +929,16 @@ async function saveAll(){
     order:Array.isArray(routeOrders[ri])?routeOrders[ri]:r.order
   }));
 
-  try{
-    localStorage.setItem('kp_config',JSON.stringify(kps));
-    localStorage.setItem('kp_routes',JSON.stringify(savedRoutes));
+try{
+  if(!getSupabaseClient()){
+    ok.style.display='inline';
+    hint.style.display='none';
+    setTimeout(()=>{ok.style.display='none';hint.style.display='inline'},2500);
+    alert('⚠️ Supabase nav pieslēgts. Bildes lokāli nesaglabāju, lai nepārsniegtu pārlūka atmiņas kvotu.');
+    return;
+  }
 
-    if(!getSupabaseClient()){
-      ok.style.display='inline';
-      hint.style.display='none';
-      setTimeout(()=>{ok.style.display='none';hint.style.display='inline'},2500);
-      alert('⚠️ Saglabāts tikai šajā ierīcē. Bērni šo vēl neredzēs, jo Supabase nav pieslēgts. Pārbaudi supabase-config.js un SQL iestatījumus.');
-      return;
-    }
-
-    const cloud = await saveConfigToSupabase(kps, savedRoutes, currentKps);
+  const cloud = await saveConfigToSupabase(kps, savedRoutes, currentKps);
     const finalKps=Array.isArray(cloud.kps)?cloud.kps:kps;
     const finalRoutes=Array.isArray(cloud.routes)?cloud.routes:savedRoutes;
 
