@@ -242,7 +242,51 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
   transform:scale(0.98);
 }
 
+.asset-load{
+  display:block;
+  width:100%;
+  margin:14px 0 16px;
+  padding:12px;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:14px;
+  background:rgba(0,0,0,0.28);
+}
 
+.asset-load-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:13px;
+  color:var(--text2);
+  margin-bottom:8px;
+}
+
+.asset-load-top strong{
+  color:#9fe870;
+  font-size:13px;
+}
+
+.asset-load-track{
+  width:100%;
+  height:9px;
+  border-radius:999px;
+  overflow:hidden;
+  background:rgba(255,255,255,0.12);
+}
+
+.asset-load-fill{
+  width:0%;
+  height:100%;
+  border-radius:999px;
+  background:#66c23a;
+  transition:width .25s ease;
+}
+
+.splash-btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
 
 </style>
 </head>
@@ -257,7 +301,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
       <span class="splash-emblem">⚔️</span>
       <h1 class="splash-title">OPERĀCIJA<br>"ATSLĒGA"</h1>
       <p class="splash-sub">Klasificēta misija</p>
-
+<div class="asset-load" id="asset-load">
+  <div class="asset-load-top">
+    <span id="asset-load-text">Ielādē misijas datus...</span>
+    <strong id="asset-load-pct">0%</strong>
+  </div>
+  <div class="asset-load-track">
+    <div class="asset-load-fill" id="asset-load-fill"></div>
+  </div>
+</div>
       <div class="setup-card">
         <h3>Nodaļas nosaukums</h3>
         <input class="setup-input" id="group-name" type="text" placeholder="piem. Vilki, Ērgļi..." maxlength="24" autocomplete="off">
@@ -268,7 +320,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
         <div class="route-btns" id="route-btns"></div>
       </div>
 
-      <button class="splash-btn" onclick="startMission()">SĀKT MISIJU →</button>
+      <button class="splash-btn" id="start-btn" onclick="startMission()" disabled>IELĀDĒ MISIJU...</button>
       <p class="splash-err" id="splash-err">Ievadi nodaļas nosaukumu un izvēlies trasi!</p>
     </div>
   </div>
@@ -588,6 +640,207 @@ async function flushPendingProgress(){
   }
 }
 
+
+// ── OFFLINE IMAGE CACHE ──
+const ASSET_DB_NAME = 'op_atslega_assets_v1';
+const ASSET_STORE = 'images';
+const objectUrlCache = {};
+
+function setStartEnabled(enabled, text){
+  const btn = document.getElementById('start-btn');
+
+  if(!btn){
+    return;
+  }
+
+  btn.disabled = !enabled;
+  btn.textContent = text || (enabled ? 'SĀKT MISIJU →' : 'IELĀDĒ MISIJU...');
+}
+
+function setAssetProgress(text, current, total){
+  const box = document.getElementById('asset-load');
+  const txt = document.getElementById('asset-load-text');
+  const pct = document.getElementById('asset-load-pct');
+  const fill = document.getElementById('asset-load-fill');
+
+  if(!box || !txt || !pct || !fill){
+    return;
+  }
+
+  box.style.display = 'block';
+
+  const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+
+  txt.textContent = text;
+  pct.textContent = percent + '%';
+  fill.style.width = percent + '%';
+}
+
+function hideAssetProgressLater(){
+  setTimeout(() => {
+    const box = document.getElementById('asset-load');
+    if(box){
+      box.style.display = 'none';
+    }
+  }, 900);
+}
+
+function openAssetDb(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(ASSET_DB_NAME, 1);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+
+      if(!db.objectStoreNames.contains(ASSET_STORE)){
+        db.createObjectStore(ASSET_STORE, { keyPath: 'url' });
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getCachedImageRecord(url){
+  if(!url){
+    return null;
+  }
+
+  try{
+    const db = await openAssetDb();
+
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, 'readonly');
+      const store = tx.objectStore(ASSET_STORE);
+      const req = store.get(url);
+
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }catch(e){
+    console.warn('Neizdevās nolasīt attēlu cache:', e.message);
+    return null;
+  }
+}
+
+async function saveCachedImage(url, blob){
+  if(!url || !blob){
+    return;
+  }
+
+  try{
+    const db = await openAssetDb();
+
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, 'readwrite');
+      const store = tx.objectStore(ASSET_STORE);
+
+      store.put({
+        url,
+        blob,
+        savedAt: Date.now()
+      });
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }catch(e){
+    console.warn('Neizdevās saglabāt attēlu cache:', e.message);
+  }
+}
+
+async function cacheImageUrl(url){
+  if(!url || !/^https?:\/\//.test(url)){
+    return false;
+  }
+
+  const existing = await getCachedImageRecord(url);
+
+  if(existing && existing.blob){
+    return true;
+  }
+
+  if(!navigator.onLine){
+    return false;
+  }
+
+  try{
+    const res = await fetch(url, {
+      cache: 'reload'
+    });
+
+    if(!res.ok){
+      throw new Error('HTTP ' + res.status);
+    }
+
+    const blob = await res.blob();
+
+    if(!blob || !blob.type.startsWith('image/')){
+      throw new Error('Fails nav attēls.');
+    }
+
+    await saveCachedImage(url, blob);
+
+    return true;
+  }catch(e){
+    console.warn('Neizdevās ielādēt attēlu bezsaistei:', url, e.message);
+    return false;
+  }
+}
+
+async function getOfflineImageSrc(url){
+  if(!url){
+    return '';
+  }
+
+  if(url.startsWith('data:')){
+    return url;
+  }
+
+  if(objectUrlCache[url]){
+    return objectUrlCache[url];
+  }
+
+  const cached = await getCachedImageRecord(url);
+
+  if(cached && cached.blob){
+    const objectUrl = URL.createObjectURL(cached.blob);
+    objectUrlCache[url] = objectUrl;
+    return objectUrl;
+  }
+
+  return navigator.onLine ? url : '';
+}
+
+async function preloadMissionAssets(){
+  const kps = getKps();
+
+  const urls = [...new Set(
+    kps
+      .map(kp => kp && kp.img ? kp.img : '')
+      .filter(url => /^https?:\/\//.test(url))
+  )];
+
+  if(urls.length === 0){
+    setAssetProgress('Misijas dati ielādēti. Bildes nav pievienotas.', 1, 1);
+    return;
+  }
+
+  setAssetProgress('Ielādē bildes bezsaistes režīmam...', 0, urls.length);
+
+  let done = 0;
+
+  for(const url of urls){
+    await cacheImageUrl(url);
+    done++;
+    setAssetProgress('Ielādē bildes bezsaistes režīmam...', done, urls.length);
+  }
+
+  setAssetProgress('Misija gatava bezsaistes režīmam.', urls.length, urls.length);
+}
+
+  
 // ── STATE ──
 let curKp=null;
 let session={groupName:'',routeIdx:0};
@@ -767,34 +1020,6 @@ function getRouteKps(){
 
 // ── SPLASH / SETUP ──
 async function initSplash(){
-  await loadRemoteConfig();
-  const routes=getRoutes();
-  const wrap=document.getElementById('route-btns');
-  wrap.innerHTML='';
-  const routeList=routes||[
-    {name:'Trase A',desc:'KP 1 → KP 10'},
-    {name:'Trase B',desc:'KP 10 → KP 1'}
-  ];
-  routeList.forEach((r,i)=>{
-    const btn=document.createElement('button');
-    btn.className='route-btn';
-    btn.dataset.idx=i;
-    btn.innerHTML=`<span class="route-name">${r.name}</span><span class="route-desc">${r.desc}</span>`;
-    btn.onclick=()=>{
-      document.querySelectorAll('.route-btn').forEach(b=>b.classList.remove('selected'));
-      btn.classList.add('selected');
-      session.routeIdx=i;
-    };
-    wrap.appendChild(btn);
-  });
-  // Check if returning session
-  const saved=getSession();
-  if(saved&&saved.groupName){
-    session=saved;
-    updateGroupTags();
-    showScreen('screen-home');
-  }
-}
 
 function startMission(){
   const name=document.getElementById('group-name').value.trim();
@@ -901,13 +1126,11 @@ function showReveal(i){
   document.getElementById('scan-wrap').style.display='block';
   document.getElementById('rv-content').classList.remove('show');
   showScreen('screen-reveal');
-  setTimeout(()=>{
+  setTimeout(async ()=>{
     document.getElementById('scan-wrap').style.display='none';
     document.getElementById('rv-tag').textContent=kp.name;
     document.getElementById('rv-caption').textContent=kp.hint||'Meklējiet šajā apkārtnē!';
-    const img=document.getElementById('rv-img'),ph=document.getElementById('rv-ph');
-    if(kp.img){img.src=kp.img;img.style.display='block';ph.style.display='none';}
-    else{img.style.display='none';ph.style.display='flex';}
+const img=document.getElementById('rv-img'),ph=document
     document.getElementById('rv-found-btn').textContent=getDone().includes(i)?'✓ Jau atrasts':'✓ Fragments atrasts!';
     document.getElementById('rv-content').classList.add('show');
     const sl=document.querySelector('.scanline');
