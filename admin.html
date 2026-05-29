@@ -596,13 +596,11 @@ async function bumpMissionResetToken(){
 
   const { error } = await client
     .from('mission_config')
-    .upsert({
-      id: MISSION_ID,
-      kps: getKps(),
-      routes: getRoutes(),
+    .update({
       reset_token: token,
       updated_at: new Date().toISOString()
-    });
+    })
+    .eq('id', MISSION_ID);
 
   if(error){
     throw error;
@@ -797,7 +795,7 @@ function renderKps(){
             </label>
           </div>
           <div class="img-prev-wrap" id="pw-${i}" style="${hasImg?'display:block':''}">
-            <img class="img-prev" id="pi-${i}" src="${hasImg?kp.img:''}" alt="">
+            <img class="img-prev" id="pi-${i}" src="${hasImg?kp.img:''}" alt="" onerror="markBrokenImg(${i})">
           </div>
           <p class="img-warn" id="sw-${i}">⚠️ Bilde liela — var būt lēnāk.</p>
           <div class="img-actions" style="${hasImg?'':'display:none'}" id="ia-${i}">
@@ -866,9 +864,27 @@ async function loadImg(e,i){
 
     const out = canvas.toDataURL('image/jpeg', 0.82);
 
-    document.getElementById('pi-' + i).src = out;
-    document.getElementById('pw-' + i).style.display = 'block';
-    document.getElementById('ia-' + i).style.display = 'flex';
+const imgEl = document.getElementById('pi-' + i);
+imgEl.src = out;
+imgEl.dataset.removed = '';
+imgEl.dataset.broken = '';
+
+document.getElementById('pw-' + i).style.display = 'block';
+document.getElementById('ia-' + i).style.display = 'flex';
+
+const card = document.getElementById('kc-' + i);
+if(card){
+  const p = card.querySelector('.kp-head-info p');
+  const num = card.querySelector('.kp-num');
+
+  if(p){
+    p.textContent = '🖼️ Bilde OK';
+  }
+
+  if(num){
+    num.classList.add('ok');
+  }
+}
 
     const kb = Math.round(out.length * 0.75 / 1024);
 
@@ -917,11 +933,75 @@ function applyOrientation(ctx,o,w,h){
 }
 
 function removeImg(i){
-  document.getElementById('pi-'+i).src='';
-  document.getElementById('pw-'+i).style.display='none';
-  document.getElementById('ia-'+i).style.display='none';
+  const img = document.getElementById('pi-' + i);
+  const wrap = document.getElementById('pw-' + i);
+  const actions = document.getElementById('ia-' + i);
+  const warn = document.getElementById('sw-' + i);
+  const card = document.getElementById('kc-' + i);
+
+  if(img){
+    img.removeAttribute('src');
+    img.dataset.removed = '1';
+    img.dataset.broken = '';
+  }
+
+  if(wrap){
+    wrap.style.display = 'none';
+  }
+
+  if(actions){
+    actions.style.display = 'none';
+  }
+
+  if(warn){
+    warn.style.display = 'none';
+  }
+
+  if(card){
+    const p = card.querySelector('.kp-head-info p');
+    const num = card.querySelector('.kp-num');
+
+    if(p){
+      p.textContent = '⚠️ Nav bildes';
+    }
+
+    if(num){
+      num.classList.remove('ok');
+    }
+  }
 }
 
+
+function markBrokenImg(i){
+  const img = document.getElementById('pi-' + i);
+  const card = document.getElementById('kc-' + i);
+  const warn = document.getElementById('sw-' + i);
+
+  if(img){
+    img.dataset.broken = '1';
+  }
+
+  if(warn){
+    warn.style.display = 'block';
+    warn.textContent = '⚠️ Bilde nav pieejama Supabase Storage. Noņem bildi un saglabā.';
+  }
+
+  if(card){
+    const p = card.querySelector('.kp-head-info p');
+    const num = card.querySelector('.kp-num');
+
+    if(p){
+      p.textContent = '⚠️ Bilde nav pieejama';
+    }
+
+    if(num){
+      num.classList.remove('ok');
+    }
+  }
+}
+
+
+  
 // ── SAVE ──
 async function saveAll(){
   const ok=document.getElementById('save-ok'),hint=document.getElementById('save-hint');
@@ -936,16 +1016,22 @@ async function saveAll(){
   for(let i=0;i<currentKps.length;i++){
     const nameEl=document.getElementById('kf-name-'+i);
     if(!nameEl)continue;
-    const pw=document.getElementById('pw-'+i);
-    const piEl=document.getElementById('pi-'+i);
-    const visibleImg=(pw&&pw.style.display!=='none'&&piEl&&piEl.src)?piEl.src:'';
-    kps[i]={
-      name:nameEl.value,
-      code:document.getElementById('kf-code-'+i).value,
-      fragment:document.getElementById('kf-frag-'+i).value,
-      hint:document.getElementById('kf-hint-'+i).value,
-      img:visibleImg || ''
-    };
+const pw=document.getElementById('pw-'+i);
+const piEl=document.getElementById('pi-'+i);
+
+const removed = piEl && piEl.dataset.removed === '1';
+const visibleImg = (!removed && pw && pw.style.display !== 'none' && piEl && piEl.getAttribute('src'))
+  ? piEl.getAttribute('src')
+  : '';
+
+kps[i]={
+  name:nameEl.value,
+  code:document.getElementById('kf-code-'+i).value,
+  fragment:document.getElementById('kf-frag-'+i).value,
+  hint:document.getElementById('kf-hint-'+i).value,
+  img:visibleImg || '',
+  imgPath: visibleImg ? (currentKps[i].imgPath || '') : ''
+};
   }
 
   const routes=getRoutes();
