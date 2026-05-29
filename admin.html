@@ -186,7 +186,7 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:-ap
   <button class="btn btn-outline" onclick="renderProgress()" style="width:100%;margin-bottom:16px">🔄 Atsvaidzināt</button>
   <div class="danger">
     <h3>⚠️ Dzēst progresu</h3>
-    <p>Dzēš VISU grupu progresu pirms jaunas spēles.</p>
+    <p>Dzēš VISU grupu progresu un liek skolēnu ierīcēm sākt maršrutu no jauna.</p>
     <div class="danger-btns">
       <button class="btn btn-red btn-sm" onclick="resetAllProgress()">🗑️ Dzēst visu progresu</button>
     </div>
@@ -556,6 +556,37 @@ async function resetRemoteProgress(){
   if(error) throw error;
 }
 
+
+async function bumpMissionResetToken(){
+  await ensureAdminSession();
+
+  const client = getSupabaseClient();
+
+  if(!client){
+    throw new Error('Supabase nav konfigurēts.');
+  }
+
+  const token = String(Date.now());
+
+  const { error } = await client
+    .from('mission_config')
+    .upsert({
+      id: MISSION_ID,
+      kps: getKps(),
+      routes: getRoutes(),
+      reset_token: token,
+      updated_at: new Date().toISOString()
+    });
+
+  if(error){
+    throw error;
+  }
+
+  return token;
+}
+
+
+  
 function dfltKps(){return[
   {name:"KP 1",code:"1111",fragment:"47-A",hint:"Meklējiet šajā apkārtnē!",img:""},
   {name:"KP 2",code:"2222",fragment:"83-B",hint:"Fragments paslēpts netālu.",img:""},
@@ -932,15 +963,29 @@ async function saveAll(){
 }
 
 async function resetAllProgress(){
-  if(!confirm('Dzēst VISU grupu progresu?'))return;
-  Object.keys(localStorage).filter(k=>k.startsWith('kp_done_')||k==='all_groups'||k==='op_session').forEach(k=>localStorage.removeItem(k));
+  if(!confirm('Dzēst VISU grupu progresu un likt skolēniem sākt no jauna?')){
+    return;
+  }
+
+  Object.keys(localStorage)
+    .filter(k =>
+      k.startsWith('kp_done_') ||
+      k === 'all_groups' ||
+      k === 'op_session'
+    )
+    .forEach(k => localStorage.removeItem(k));
+
   try{
     await resetRemoteProgress();
+    await bumpMissionResetToken();
   }catch(e){
-    alert('Lokāli progress dzēsts, bet Supabase neizdevās dzēst: '+e.message);
+    alert('Lokāli progress dzēsts, bet Supabase neizdevās pilnībā atiestatīt: ' + e.message);
+    return;
   }
+
   renderProgress();
-  alert('✅ Visu grupu progress dzēsts!');
+
+  alert('✅ Progress dzēsts. Skolēnu ierīces, atverot vai atsvaidzinot lapu, sāks no jauna.');
 }
 
 async function resetConfig(){
