@@ -145,9 +145,25 @@ html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:-ap
 .cloud-ok{background:var(--green-dim);border-color:var(--green);color:var(--green)}
 .cloud-bad{background:var(--red-dim);border-color:#5a2020;color:var(--red-text)}
 @media(max-width:560px){.auth-row{grid-template-columns:1fr}.auth-row button{width:100%}}
+
+body.admin-locked .tabs,
+body.admin-locked .tab-content,
+body.admin-locked .save-bar,
+body.admin-locked .header-btns button[onclick="saveAll()"]{
+  display:none !important;
+}
+
+body.admin-locked #cloud-status{
+  margin-bottom:12px;
+}
+
+body.admin-locked #auth-panel{
+  display:block !important;
+}
+  
 </style>
 </head>
-<body>
+<body class="admin-locked">
 
 <div class="header">
   <div>
@@ -257,28 +273,38 @@ async function refreshAuthUi(){
   if(!status || !panel) return;
 
   if(!client){
+    document.body.classList.add('admin-locked');
     status.className = 'notice cloud-bad';
-    status.innerHTML = '⚠️ Supabase nav pieslēgts. Aizpildi <strong>supabase-config.js</strong> ar Project URL un anon/publishable key, citādi bērni neredzēs admina saglabātās bildes.';
+    status.innerHTML = '⚠️ Supabase nav pieslēgts. Aizpildi <strong>supabase-config.js</strong>.';
     panel.style.display = 'none';
     return;
   }
 
   try{
     const { data, error } = await client.auth.getSession();
+
     if(error) throw error;
+
     if(data && data.session){
       const email = data.session.user && data.session.user.email ? data.session.user.email : 'admin';
+
+      document.body.classList.remove('admin-locked');
+
       status.className = 'notice cloud-ok';
-      status.innerHTML = '✅ Mākoņa pieslēgums aktīvs. Pieslēdzies kā <strong>'+email+'</strong>. <button class="btn btn-outline btn-sm" onclick="logoutAdmin()" style="margin-left:8px">Iziet</button>';
+      status.innerHTML = '✅ Admin pieslēgts kā <strong>'+email+'</strong>. <button class="btn btn-outline btn-sm" onclick="logoutAdmin()" style="margin-left:8px">Iziet</button>';
       panel.style.display = 'none';
     } else {
+      document.body.classList.add('admin-locked');
+
       status.className = 'notice';
-      status.innerHTML = '🔐 Lai saglabātu attēlus un trases bērniem, pieslēdzies ar Supabase admin e-pastu un paroli.';
+      status.innerHTML = '🔐 Ievadi admin e-pastu un paroli, lai atvērtu instruktora paneli.';
       panel.style.display = 'block';
     }
   }catch(e){
+    document.body.classList.add('admin-locked');
+
     status.className = 'notice cloud-bad';
-    status.textContent = '⚠️ Neizdevās pārbaudīt Supabase pieslēgumu: ' + e.message;
+    status.textContent = '⚠️ Neizdevās pārbaudīt pieslēgumu: ' + e.message;
     panel.style.display = 'block';
   }
 }
