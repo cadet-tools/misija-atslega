@@ -377,12 +377,17 @@ function dataUrlToBlob(dataUrl){
 
 async function uploadImageToSupabase(pointNo, dataUrl){
   await ensureAdminSession();
+
   const blob = dataUrlToBlob(dataUrl);
   const ext = blob.type.includes('png') ? 'png' : 'jpg';
   const path = `${MISSION_ID}/kp-${pointNo}-${Date.now()}.${ext}`;
 
   const client = getSupabaseClient();
-  if(!client) throw new Error('Supabase nav konfigurēts.');
+
+  if(!client){
+    throw new Error('Supabase nav konfigurēts.');
+  }
+
   const { error } = await client.storage
     .from(SUPABASE_BUCKET)
     .upload(path, blob, {
@@ -390,27 +395,114 @@ async function uploadImageToSupabase(pointNo, dataUrl){
       upsert: false
     });
 
-  if(error) throw error;
+  if(error){
+    throw error;
+  }
 
-  const { data } = client.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  const { data } = client.storage
+    .from(SUPABASE_BUCKET)
+    .getPublicUrl(path);
+
+  return {
+    url: data.publicUrl,
+    path
+  };
+}
+function getStoragePathFromPublicUrl(url){
+  if(!url || typeof url !== 'string'){
+    return '';
+  }
+
+  try{
+    const u = new URL(url);
+    const marker = `/storage/v1/object/public/${SUPABASE_BUCKET}/`;
+    const idx = u.pathname.indexOf(marker);
+
+    if(idx === -1){
+      return '';
+    }
+
+    return decodeURIComponent(u.pathname.slice(idx + marker.length));
+  }catch(e){
+    return '';
+  }
 }
 
-async function saveConfigToSupabase(kps, routes){
+async function deleteImageFromSupabase(path){
+  if(!path){
+    return;
+  }
+
+  await ensureAdminSession();
+
+  const client = getSupabaseClient();
+
+  if(!client){
+    throw new Error('Supabase nav konfigurēts.');
+  }
+
+  const cleanPath = String(path).replace(/^\/+/, '');
+
+  const { error } = await client.storage
+    .from(SUPABASE_BUCKET)
+    .remove([cleanPath]);
+
+  if(error){
+    throw new Error('Neizdevās dzēst veco attēlu no Supabase: ' + error.message);
+  }
+}
+  
+
+async function saveConfigToSupabase(kps, routes, previousKps = []){
   await ensureAdminSession();
 
   const kpsForSupabase = [];
-  for(let i=0;i<kps.length;i++){
-    const kp = {...kps[i]};
+
+  for(let i = 0; i < kps.length; i++){
+    const kp = { ...kps[i] };
+    const previousKp = previousKps[i] || {};
+
+    const oldPath =
+      previousKp.imgPath ||
+      getStoragePathFromPublicUrl(previousKp.img);
+
+    let newPath = '';
+
     if(kp.img && kp.img.startsWith('data:')){
-      setSaveHint('Augšupielādē bildi KP ' + (i+1) + '...');
-      kp.img = await uploadImageToSupabase(i+1, kp.img);
+      setSaveHint('Augšupielādē bildi KP ' + (i + 1) + '...');
+
+      const uploaded = await uploadImageToSupabase(i + 1, kp.img);
+
+      kp.img = uploaded.url;
+      kp.imgPath = uploaded.path;
+      newPath = uploaded.path;
+    } else if(kp.img){
+      kp.imgPath =
+        previousKp.imgPath ||
+        getStoragePathFromPublicUrl(kp.img) ||
+        '';
+    } else {
+      kp.imgPath = '';
     }
+
+    const imageRemoved = oldPath && !kp.img;
+    const imageReplaced = oldPath && newPath && oldPath !== newPath;
+
+    if(imageRemoved || imageReplaced){
+      setSaveHint('Dzēš veco bildi KP ' + (i + 1) + '...');
+
+      await deleteImageFromSupabase(oldPath);
+    }
+
     kpsForSupabase.push(kp);
   }
 
   const client = getSupabaseClient();
-  if(!client) throw new Error('Supabase nav konfigurēts.');
+
+  if(!client){
+    throw new Error('Supabase nav konfigurēts.');
+  }
+
   const { data, error } = await client
     .from('mission_config')
     .upsert({
@@ -422,10 +514,18 @@ async function saveConfigToSupabase(kps, routes){
     .select('kps,routes')
     .single();
 
-  if(error) throw error;
+  if(error){
+    throw error;
+  }
 
-  if(Array.isArray(data.kps)) localStorage.setItem('kp_config', JSON.stringify(data.kps));
-  if(Array.isArray(data.routes)) localStorage.setItem('kp_routes', JSON.stringify(data.routes));
+  if(Array.isArray(data.kps)){
+    localStorage.setItem('kp_config', JSON.stringify(data.kps));
+  }
+
+  if(Array.isArray(data.routes)){
+    localStorage.setItem('kp_routes', JSON.stringify(data.routes));
+  }
+
   return data;
 }
 
@@ -758,7 +858,7 @@ async function saveAll(){
       return;
     }
 
-    const cloud=await saveConfigToSupabase(kps,savedRoutes);
+    const cloud = await saveConfigToSupabase(kps, savedRoutes, currentKps);
     const finalKps=Array.isArray(cloud.kps)?cloud.kps:kps;
     const finalRoutes=Array.isArray(cloud.routes)?cloud.routes:savedRoutes;
 
@@ -792,18 +892,27 @@ async function resetAllProgress(){
 }
 
 async function resetConfig(){
-  if(!confirm('Atiestatīt visu konfigurāciju?'))return;
-  const kps=dfltKps();
-  const routes=dfltRoutes();
-  localStorage.setItem('kp_config',JSON.stringify(kps));
-  localStorage.setItem('kp_routes',JSON.stringify(routes));
-  routeOrders=routes.map(r=>[...r.order]);
-  try{
-    await saveConfigToSupabase(kps,routes);
-  }catch(e){
-    alert('Lokāli konfigurācija atiestatīta, bet mākonī neizdevās saglabāt: '+e.message);
+  if(!confirm('Atiestatīt visu konfigurāciju?')){
+    return;
   }
-  renderRoutes();renderKps();
+
+  const previousKps = getKps();
+  const kps = dfltKps();
+  const routes = dfltRoutes();
+
+  localStorage.setItem('kp_config', JSON.stringify(kps));
+  localStorage.setItem('kp_routes', JSON.stringify(routes));
+
+  routeOrders = routes.map(r => [...r.order]);
+
+  try{
+    await saveConfigToSupabase(kps, routes, previousKps);
+  }catch(e){
+    alert('Lokāli konfigurācija atiestatīta, bet mākonī neizdevās saglabāt: ' + e.message);
+  }
+
+  renderRoutes();
+  renderKps();
 }
 
 // ── INIT ──
