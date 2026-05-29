@@ -754,39 +754,75 @@ function renderKps(){
 
 function toggleKp(i){document.getElementById('kc-'+i).classList.toggle('open')}
 
-function loadImg(e,i){
-  const file=e.target.files[0];
-  if(!file||!file.type.startsWith('image/'))return;
-  document.getElementById('sw-'+i).style.display='none';
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    getOrientation(ev.target.result,orientation=>{
-      const img=new Image();
-      img.onload=()=>{
-        const MAX=1200;
-        let w=img.width,h=img.height;
-        const rotated=(orientation>=5&&orientation<=8);
-        const longSide=Math.max(rotated?h:w,rotated?w:h);
-        const scale=longSide>MAX?MAX/longSide:1;
-        const cw=rotated?Math.round(h*scale):Math.round(w*scale);
-        const ch=rotated?Math.round(w*scale):Math.round(h*scale);
-        const canvas=document.createElement('canvas');
-        canvas.width=cw;canvas.height=ch;
-        const ctx=canvas.getContext('2d');
-        applyOrientation(ctx,orientation,cw,ch);
-        ctx.drawImage(img,0,0,Math.round(w*scale),Math.round(h*scale));
-        const out=canvas.toDataURL('image/jpeg',0.72);
-        document.getElementById('pi-'+i).src=out;
-        document.getElementById('pw-'+i).style.display='block';
-        document.getElementById('ia-'+i).style.display='flex';
-        const kb=Math.round(out.length*0.75/1024);
-        if(kb>600)document.getElementById('sw-'+i).style.display='block';
-      };
-      img.src=ev.target.result;
-    });
-  };
-  reader.readAsDataURL(file);
-  e.target.value='';
+async function loadImg(e,i){
+  const file = e.target.files[0];
+
+  if(!file || !file.type.startsWith('image/')){
+    return;
+  }
+
+  document.getElementById('sw-' + i).style.display = 'none';
+
+  try{
+    let source;
+
+    if(window.createImageBitmap){
+      source = await createImageBitmap(file, {
+        imageOrientation: 'from-image'
+      });
+    }else{
+      source = await new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(img);
+        };
+
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('Neizdevās ielādēt attēlu.'));
+        };
+
+        img.src = url;
+      });
+    }
+
+    const MAX = 1600;
+    const w = source.width;
+    const h = source.height;
+    const scale = Math.min(1, MAX / Math.max(w, h));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+
+    if(source.close){
+      source.close();
+    }
+
+    const out = canvas.toDataURL('image/jpeg', 0.82);
+
+    document.getElementById('pi-' + i).src = out;
+    document.getElementById('pw-' + i).style.display = 'block';
+    document.getElementById('ia-' + i).style.display = 'flex';
+
+    const kb = Math.round(out.length * 0.75 / 1024);
+
+    if(kb > 900){
+      document.getElementById('sw-' + i).style.display = 'block';
+    }
+  }catch(err){
+    alert('Neizdevās apstrādāt attēlu: ' + err.message);
+  }
+
+  e.target.value = '';
 }
 
 function getOrientation(dataUrl,cb){
