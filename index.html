@@ -366,19 +366,30 @@ function getSupabaseClient(){
 async function loadRemoteConfig(){
   const client = getSupabaseClient();
   if(!client) return false;
+
   try{
     const { data, error } = await client
       .from('mission_config')
-      .select('kps,routes')
+      .select('kps,routes,reset_token')
       .eq('id', MISSION_ID)
       .maybeSingle();
 
     if(error) throw error;
+
     if(data){
-      if(Array.isArray(data.kps)) localStorage.setItem('kp_config', JSON.stringify(data.kps));
-      if(Array.isArray(data.routes)) localStorage.setItem('kp_routes', JSON.stringify(data.routes));
+      applyRemoteResetToken(data.reset_token);
+
+      if(Array.isArray(data.kps)){
+        localStorage.setItem('kp_config', JSON.stringify(data.kps));
+      }
+
+      if(Array.isArray(data.routes)){
+        localStorage.setItem('kp_routes', JSON.stringify(data.routes));
+      }
+
       return true;
     }
+
     return false;
   }catch(e){
     console.warn('Supabase config nav pieejams, izmanto lokālo kopiju:', e.message);
@@ -429,6 +440,86 @@ function saveGroupProgress(done){
   }catch(e){}
   sendProgressToCloud(done);
 }
+
+
+function clearLocalStudentProgress(){
+  Object.keys(localStorage)
+    .filter(k =>
+      k.startsWith('kp_done_') ||
+      k === 'op_session' ||
+      k === 'all_groups'
+    )
+    .forEach(k => localStorage.removeItem(k));
+
+  session = {
+    groupName: '',
+    routeIdx: 0
+  };
+
+  curKp = null;
+}
+
+function applyRemoteResetToken(remoteToken){
+  if(!remoteToken){
+    return false;
+  }
+
+  const localToken = localStorage.getItem('op_reset_token');
+
+  if(localToken && localToken !== remoteToken){
+    clearLocalStudentProgress();
+
+    localStorage.setItem('op_reset_token', remoteToken);
+
+    const groupInput = document.getElementById('group-name');
+    if(groupInput){
+      groupInput.value = '';
+    }
+
+    document.querySelectorAll('.route-btn').forEach(b => {
+      b.classList.remove('selected');
+    });
+
+    showScreen('screen-splash');
+
+    alert('Instruktors atiestatīja spēli. Sāciet maršrutu no jauna.');
+
+    return true;
+  }
+
+  if(!localToken){
+    localStorage.setItem('op_reset_token', remoteToken);
+  }
+
+  return false;
+}
+
+async function checkRemoteReset(){
+  const client = getSupabaseClient();
+
+  if(!client){
+    return;
+  }
+
+  try{
+    const { data, error } = await client
+      .from('mission_config')
+      .select('reset_token')
+      .eq('id', MISSION_ID)
+      .maybeSingle();
+
+    if(error){
+      throw error;
+    }
+
+    if(data){
+      applyRemoteResetToken(data.reset_token);
+    }
+  }catch(e){
+    console.warn('Neizdevās pārbaudīt reset statusu:', e.message);
+  }
+}
+  
 
 function dflt(){return[
   {name:"KP 1",code:"1111",fragment:"47-A",hint:"Meklējiet šajā apkārtnē!",img:""},
@@ -659,6 +750,7 @@ if('serviceWorker' in navigator){
 
 // ── INIT ──
 initSplash();
+setInterval(checkRemoteReset, 10000);
 </script>
 </body>
 </html>
