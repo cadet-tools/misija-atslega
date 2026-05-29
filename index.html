@@ -397,21 +397,102 @@ async function loadRemoteConfig(){
   }
 }
 
-function sendProgressToCloud(done){
-  if(!session.groupName) return;
-  const client = getSupabaseClient();
-  if(!client) return;
+function getPendingProgress(){
+  try{
+    return JSON.parse(localStorage.getItem('op_pending_progress') || '{}');
+  }catch(e){
+    return {};
+  }
+}
 
-  client.from('mission_progress').upsert({
+function savePendingProgress(map){
+  try{
+    localStorage.setItem('op_pending_progress', JSON.stringify(map));
+  }catch(e){}
+}
+
+function progressPayload(done){
+  return {
     mission_id: MISSION_ID,
     group_name: session.groupName,
     route_idx: session.routeIdx,
     done,
     ts: Date.now(),
     updated_at: new Date().toISOString()
-  }).then(({ error }) => {
-    if(error) console.warn('Progress netika nosūtīts Supabase:', error.message);
-  });
+  };
+}
+
+function progressKey(payload){
+  return payload.mission_id + '__' + payload.group_name + '__r' + payload.route_idx;
+}
+
+function queueProgress(payload){
+  const pending = getPendingProgress();
+  pending[progressKey(payload)] = payload;
+  savePendingProgress(pending);
+}
+
+async function sendProgressToCloud(done){
+  if(!session.groupName){
+    return;
+  }
+
+  const payload = progressPayload(done);
+  const client = getSupabaseClient();
+
+  if(!client || !navigator.onLine){
+    queueProgress(payload);
+    return;
+  }
+
+  try{
+    const { error } = await client
+      .from('mission_progress')
+      .upsert(payload);
+
+    if(error){
+      throw error;
+    }
+
+    const pending = getPendingProgress();
+    delete pending[progressKey(payload)];
+    savePendingProgress(pending);
+
+  }catch(e){
+    queueProgress(payload);
+    console.warn('Progress netika nosūtīts Supabase, saglabāts rindā:', e.message);
+  }
+}
+
+async function flushPendingProgress(){
+  const client = getSupabaseClient();
+
+  if(!client || !navigator.onLine){
+    return;
+  }
+
+  const pending = getPendingProgress();
+  const keys = Object.keys(pending);
+
+  for(const key of keys){
+    const payload = pending[key];
+
+    try{
+      const { error } = await client
+        .from('mission_progress')
+        .upsert(payload);
+
+      if(error){
+        throw error;
+      }
+
+      delete pending[key];
+      savePendingProgress(pending);
+
+    }catch(e){
+      console.warn('Neizdevās nosūtīt atlikto progresu:', e.message);
+    }
+  }
 }
 
 // ── STATE ──
@@ -444,11 +525,12 @@ function saveGroupProgress(done){
 
 function clearLocalStudentProgress(){
   Object.keys(localStorage)
-    .filter(k =>
-      k.startsWith('kp_done_') ||
-      k === 'op_session' ||
-      k === 'all_groups'
-    )
+.filter(k =>
+  k.startsWith('kp_done_') ||
+  k === 'op_session' ||
+  k === 'all_groups' ||
+  k === 'op_pending_progress'
+)
     .forEach(k => localStorage.removeItem(k));
 
   session = {
@@ -740,17 +822,38 @@ function resetGame(){
 }
 
 // ── OFFLINE ──
-window.addEventListener('online',()=>document.getElementById('offline-badge').style.display='none');
-window.addEventListener('offline',()=>document.getElementById('offline-badge').style.display='block');
-if(!navigator.onLine)document.getElementById('offline-badge').style.display='block';
+window.addEventListener('online', async () => {
+  document.getElementById('offline-badge').style.display = 'none';
+  await flushPendingProgress();
+  if(typeof checkRemoteReset === 'function'){
+    await checkRemoteReset();
+  }
+});
+
+window.addEventListener('offline', () => {
+  document.getElementById('offline-badge').style.display = 'block';
+});
+
+if(!navigator.onLine){
+  document.getElementById('offline-badge').style.display = 'block';
+}
 // GitHub Pages versijā servisa darbinieku nereģistrējam, lai veci HTML/JS faili nepaliek kešā.
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(r=>r.unregister())).catch(()=>{});
 }
 
 // ── INIT ──
-initSplash();
-setInterval(checkRemoteReset, 10000);
+initSplash().then(() => {
+  flushPendingProgress();
+});
+
+setInterval(() => {
+  flushPendingProgress();
+
+  if(typeof checkRemoteReset === 'function'){
+    checkRemoteReset();
+  }
+}, 10000);
 </script>
 </body>
 </html>
