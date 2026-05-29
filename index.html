@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Op. Atslēga">
+<title>Operācija Atslēga</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0a0a0a;--surface:#141414;--surface2:#1e1e1e;--surface3:#282828;
+  --border:#2a2a2a;--border2:#383838;
+  --text:#f0f0f0;--text2:#888;--text3:#555;
+  --green:#22c97a;--green-dim:#0a2e1a;--green-text:#22c97a;
+  --amber:#f0a500;--amber-dim:#3d2a00;
+  --red:#e05555;--red-dim:#3d1515;
+  --radius:12px;--radius-sm:8px;
+  --nav:54px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:hidden}
+.screen{display:none;height:100dvh;flex-direction:column;overflow:hidden}
+.screen.active{display:flex}
+
+/* SPLASH / SETUP */
+#screen-splash{align-items:center;justify-content:center;background:var(--bg)}
+.splash-inner{text-align:center;padding:32px 28px;width:100%;max-width:380px}
+.splash-emblem{font-size:56px;margin-bottom:14px;display:block}
+.splash-title{font-size:22px;font-weight:700;letter-spacing:0.06em;margin-bottom:4px}
+.splash-sub{font-size:11px;color:var(--text2);margin-bottom:28px;letter-spacing:0.1em;text-transform:uppercase}
+.setup-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px;text-align:left}
+.setup-card h3{font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.setup-input{width:100%;padding:11px 13px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);font-size:15px;color:var(--text);font-family:inherit;-webkit-appearance:none}
+.setup-input:focus{outline:none;border-color:var(--green)}
+.route-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+.route-btn{padding:12px 8px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;text-align:center;transition:all 0.15s}
+.route-btn.selected{border-color:var(--green);color:var(--green);background:var(--green-dim)}
+.route-btn:active{opacity:0.8}
+.route-name{font-size:14px;font-weight:700;display:block;margin-bottom:2px}
+.route-desc{font-size:11px;opacity:0.7}
+.splash-btn{background:var(--green);color:#000;border:none;border-radius:var(--radius);padding:14px 0;font-size:16px;font-weight:700;cursor:pointer;width:100%;margin-top:4px}
+.splash-btn:active{opacity:0.8}
+.splash-err{color:var(--red);font-size:13px;margin-top:8px;display:none;text-align:center}
+
+/* SHARED HEADER */
+.pg-header{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:10px}
+.pg-header-inner{flex:1;min-width:0}
+.pg-header h1{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-header p{font-size:11px;color:var(--text2);margin-top:1px}
+.back-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:var(--radius-sm);padding:7px 11px;font-size:13px;cursor:pointer;flex-shrink:0}
+.group-tag{background:var(--green-dim);color:var(--green);font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid var(--green);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+
+/* HOME */
+.progress-wrap{padding:10px 14px 8px;flex-shrink:0}
+.progress-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.progress-top span{font-size:11px;color:var(--text2)}
+.progress-top strong{font-size:17px;font-weight:700;color:var(--green)}
+.progress-track{height:3px;background:var(--surface3);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--green);border-radius:2px;transition:width 0.4s ease}
+.kp-list{flex:1;overflow-y:auto;padding:8px 12px;-webkit-overflow-scrolling:touch}
+.kp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 13px;margin-bottom:6px;display:flex;align-items:center;gap:11px;cursor:pointer}
+.kp-card:active{background:var(--surface2)}
+.kp-card.done{border-color:#1a4a2a;background:#080f0a}
+.kp-card.locked{opacity:0.4}
+.kp-circle{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;color:var(--text2)}
+.kp-card.done .kp-circle{border-color:var(--green);color:var(--green);background:var(--green-dim)}
+.kp-card.locked .kp-circle{border-color:var(--text3);color:var(--text3)}
+.kp-info{flex:1;min-width:0}
+.kp-info h3{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kp-info p{font-size:11px;color:var(--text2);margin-top:1px}
+.kp-chip{font-size:10px;font-family:monospace;font-weight:700;color:var(--green);background:var(--green-dim);padding:2px 6px;border-radius:4px;margin-top:2px;display:inline-block}
+.kp-arrow{color:var(--text3);font-size:16px;flex-shrink:0}
+.kp-card.done .kp-arrow{color:var(--green)}
+
+/* CODE ENTRY */
+.code-body{padding:16px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.code-lbl{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.code-row{display:flex;gap:8px;margin-bottom:8px}
+.code-input{flex:1;background:var(--surface2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:12px;font-size:26px;font-weight:700;letter-spacing:0.3em;text-align:center;font-family:monospace;color:var(--text);-webkit-appearance:none;min-width:0}
+.code-input:focus{outline:none;border-color:var(--green)}
+.code-submit{background:var(--green);color:#000;border:none;border-radius:var(--radius-sm);padding:12px 16px;font-size:18px;font-weight:700;cursor:pointer;flex-shrink:0}
+.code-err{font-size:13px;margin-top:6px;display:none;padding:9px 12px;background:var(--red-dim);border-radius:var(--radius-sm);color:var(--red)}
+.code-hint{font-size:12px;color:var(--text3);margin-top:12px;line-height:1.5}
+.done-box{background:#080f0a;border:1px solid #1a4a2a;border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:10px}
+.done-box .ck{font-size:22px;flex-shrink:0}
+.done-box p{font-size:14px;color:var(--green-text);line-height:1.4}
+.done-box strong{font-family:monospace;font-size:14px}
+
+/* REVEAL */
+#screen-reveal{background:#000;align-items:center;justify-content:center;overflow-y:auto}
+.reveal-inner{width:100%;max-width:440px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:11px}
+.scan-wrap{text-align:center;padding:28px 0}
+.scan-ring{width:58px;height:58px;border-radius:50%;border:3px solid var(--green);border-top-color:transparent;margin:0 auto 14px;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-txt{font-size:12px;color:var(--green);letter-spacing:0.15em;text-transform:uppercase;font-weight:600}
+.rv-content{width:100%;display:none;flex-direction:column;align-items:center;gap:11px}
+.rv-content.show{display:flex}
+.rv-tag{font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:var(--green);border:1px solid #1a4a2a;padding:3px 10px;border-radius:20px}
+.rv-title{font-size:15px;font-weight:700;text-align:center}
+.rv-img-wrap{width:100%;border-radius:var(--radius);overflow:hidden;border:2px solid #1a4a2a;position:relative}
+.rv-img{width:100%;display:block;max-height:42dvh;object-fit:cover}
+.rv-placeholder{width:100%;height:180px;background:var(--surface2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text3)}
+.rv-placeholder span{font-size:32px}
+.rv-placeholder p{font-size:12px;text-align:center;line-height:1.4}
+.rv-badge{background:var(--amber-dim);color:var(--amber);font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid var(--amber)}
+.rv-caption{font-size:13px;color:var(--text2);text-align:center;line-height:1.5}
+.rv-actions{display:flex;gap:8px;width:100%}
+.rv-back{flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px;font-size:14px;font-weight:600;cursor:pointer}
+.rv-found{flex:2;background:var(--green);color:#000;border:none;border-radius:var(--radius-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+.scanline{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(transparent,var(--green),transparent);animation:scandown 2s linear 1;opacity:0}
+@keyframes scandown{0%{top:0;opacity:0.7}100%{top:100%;opacity:0}}
+.rv-img-wrap::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(34,201,122,0.04) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(34,201,122,0.04) 40px);pointer-events:none}
+
+/* FRAGMENTS */
+.frag-body{padding:10px 12px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.frag-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:5px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.frag-row.done{border-color:#1a4a2a;background:#080f0a}
+.frag-left strong{color:var(--text);font-size:13px;font-weight:600;display:block}
+.frag-left span{font-size:11px;color:var(--text2)}
+.frag-val{font-family:monospace;font-size:13px;font-weight:700;color:var(--green);flex-shrink:0}
+.frag-empty{font-size:14px;color:var(--surface3);flex-shrink:0}
+.full-code-box{background:var(--green-dim);border:1px solid var(--green);border-radius:var(--radius);padding:13px;margin-bottom:9px;display:none}
+.full-code-box h3{font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--green);margin-bottom:5px}
+.full-code-val{font-family:monospace;font-size:13px;font-weight:700;color:var(--green);line-height:2;word-break:break-all}
+
+/* FINAL */
+#screen-final{align-items:center;justify-content:center;padding:24px;text-align:center;overflow-y:auto}
+.final-icon{font-size:60px;margin-bottom:10px}
+.final-title{font-size:22px;font-weight:700;margin-bottom:6px;background:linear-gradient(135deg,#22c97a,#7fffca);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.final-sub{font-size:14px;color:var(--text2);margin-bottom:18px;line-height:1.6}
+.final-code-box{background:var(--surface);border:1px solid #1a4a2a;border-radius:var(--radius);padding:14px;width:100%;max-width:340px;margin-bottom:18px}
+.final-code-lbl{font-size:11px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px}
+.final-code-val{font-family:monospace;font-size:13px;font-weight:700;color:var(--green);line-height:2;word-break:break-all}
+.final-restart{background:var(--surface2);color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 20px;font-size:13px;cursor:pointer}
+
+/* BOTTOM NAV */
+.bottom-nav{background:var(--surface);border-top:1px solid var(--border);display:flex;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 4px;border:none;background:none;color:var(--text3);cursor:pointer;font-size:9px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;min-height:var(--nav)}
+.nav-btn svg{width:20px;height:20px}
+.nav-btn.active{color:var(--green)}
+
+/* OFFLINE BADGE */
+.offline-badge{position:fixed;top:0;left:0;right:0;background:#3d2a00;color:#f0a500;font-size:12px;font-weight:600;text-align:center;padding:4px;z-index:999;display:none}
+</style>
+</head>
+<body>
+
+<div class="offline-badge" id="offline-badge">📵 Bezsaistes režīms — progress tiks saglabāts lokāli</div>
+
+<!-- SPLASH / SETUP -->
+<div class="screen active" id="screen-splash">
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:16px 0">
+    <div class="splash-inner">
+      <span class="splash-emblem">⚔️</span>
+      <h1 class="splash-title">OPERĀCIJA<br>"ATSLĒGA"</h1>
+      <p class="splash-sub">Klasificēta misija</p>
+
+      <div class="setup-card">
+        <h3>Nodaļas nosaukums</h3>
+        <input class="setup-input" id="group-name" type="text" placeholder="piem. Vilki, Ērgļi..." maxlength="24" autocomplete="off">
+      </div>
+
+      <div class="setup-card">
+        <h3>Izvēlies trasi</h3>
+        <div class="route-btns" id="route-btns"></div>
+      </div>
+
+      <button class="splash-btn" onclick="startMission()">SĀKT MISIJU →</button>
+      <p class="splash-err" id="splash-err">Ievadi nodaļas nosaukumu un izvēlies trasi!</p>
+    </div>
+  </div>
+</div>
+
+<!-- HOME -->
+<div class="screen" id="screen-home">
+  <div class="pg-header">
+    <div class="pg-header-inner">
+      <h1>⚔️ Operācija "Atslēga"</h1>
+      <p>Atrodi kodu kartē → ievadi → meklē fragmentu</p>
+    </div>
+    <span class="group-tag" id="home-group-tag"></span>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-top">
+      <span>Progress</span>
+      <strong id="home-score">0 <span style="font-size:12px;color:var(--text2);font-weight:400">/ 10</span></strong>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="home-progress" style="width:0%"></div></div>
+  </div>
+  <div class="kp-list" id="kp-list"></div>
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="showScreen('screen-home')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Sākums
+    </button>
+    <button class="nav-btn" onclick="goCode()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M8 12h8M12 8v8"/></svg>
+      Ievadīt kodu
+    </button>
+    <button class="nav-btn" onclick="showScreen('screen-frags')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+      Fragmenti
+    </button>
+  </nav>
+</div>
+
+<!-- CODE ENTRY -->
+<div class="screen" id="screen-code">
+  <div class="pg-header">
+    <button class="back-btn" onclick="showScreen('screen-home')">← Atpakaļ</button>
+    <div class="pg-header-inner">
+      <h1>Ievadīt kodu</h1>
+      <p>4-ciparu kods no kartes lapiņas</p>
+    </div>
+    <span class="group-tag" id="code-group-tag"></span>
+  </div>
+  <div class="code-body" id="code-body">
+    <p class="code-lbl">Kontrolpunkta kods</p>
+    <div class="code-row">
+      <input class="code-input" id="code-input" type="tel" maxlength="4" placeholder="••••" autocomplete="off" inputmode="numeric">
+      <button class="code-submit" onclick="submitCode()">→</button>
+    </div>
+    <div class="code-err" id="code-err"></div>
+    <p class="code-hint">Katram kontrolpunktam uz kartes ir lapiņa ar unikālu 4-ciparu kodu.</p>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-btn" onclick="showScreen('screen-home')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Sākums
+    </button>
+    <button class="nav-btn active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M8 12h8M12 8v8"/></svg>
+      Ievadīt kodu
+    </button>
+    <button class="nav-btn" onclick="showScreen('screen-frags')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+      Fragmenti
+    </button>
+  </nav>
+</div>
+
+<!-- REVEAL -->
+<div class="screen" id="screen-reveal">
+  <div class="reveal-inner">
+    <div class="scan-wrap" id="scan-wrap">
+      <div class="scan-ring"></div>
+      <p class="scan-txt">Atšifrē kodu...</p>
+    </div>
+    <div class="rv-content" id="rv-content">
+      <div class="rv-tag" id="rv-tag"></div>
+      <h2 class="rv-title">Norādes bilde — fragments tuvumā</h2>
+      <div class="rv-img-wrap">
+        <div class="scanline"></div>
+        <img class="rv-img" id="rv-img" src="" alt="" style="display:none">
+        <div class="rv-placeholder" id="rv-ph">
+          <span>🗺️</span><p>Nav norādes bildes</p>
+        </div>
+      </div>
+      <div class="rv-badge">📍 Fragments ~10 m rādiusā</div>
+      <p class="rv-caption" id="rv-caption"></p>
+      <div class="rv-actions">
+        <button class="rv-back" onclick="showScreen('screen-home')">← Atpakaļ</button>
+        <button class="rv-found" id="rv-found-btn" onclick="markFound()">✓ Fragments atrasts!</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FRAGMENTS -->
+<div class="screen" id="screen-frags">
+  <div class="pg-header">
+    <div class="pg-header-inner">
+      <h1>🗝️ Koda fragmenti</h1>
+      <p id="frag-count">Savāktie fragmenti</p>
+    </div>
+    <span class="group-tag" id="frags-group-tag"></span>
+  </div>
+  <div class="frag-body">
+    <div class="full-code-box" id="full-code-box">
+      <h3>✅ Pilnais kods</h3>
+      <div class="full-code-val" id="full-code-val"></div>
+    </div>
+    <div id="frag-list"></div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-btn" onclick="showScreen('screen-home')">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Sākums
+    </button>
+    <button class="nav-btn" onclick="goCode()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M8 12h8M12 8v8"/></svg>
+      Ievadīt kodu
+    </button>
+    <button class="nav-btn active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+      Fragmenti
+    </button>
+  </nav>
+</div>
+
+<!-- FINAL -->
+<div class="screen" id="screen-final">
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+    <div class="final-icon">🔓</div>
+    <h2 class="final-title">MISIJA IZPILDĪTA</h2>
+    <p class="final-sub" id="final-sub">Visi fragmenti iegūti!<br>Nogādājiet kodu instruktoram.</p>
+    <div class="final-code-box">
+      <div class="final-code-lbl">PILNAIS KODS</div>
+      <div class="final-code-val" id="final-code-val"></div>
+    </div>
+    <button class="final-restart" onclick="resetGame()">Sākt no jauna</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+
+<script>
+
+
+// ── CLOUD SYNC (GitHub Pages + Supabase tieši no pārlūka) ──
+const SUPABASE_URL = window.OPATSLEGA_SUPABASE_URL;
+const SUPABASE_KEY = window.OPATSLEGA_SUPABASE_ANON_KEY;
+const MISSION_ID = window.OPATSLEGA_MISSION_ID || 'default';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function loadRemoteConfig(){
+  try{
+    const { data, error } = await sb
+      .from('mission_config')
+      .select('kps,routes')
+      .eq('id', MISSION_ID)
+      .maybeSingle();
+
+    if(error) throw error;
+    if(data){
+      if(Array.isArray(data.kps)) localStorage.setItem('kp_config', JSON.stringify(data.kps));
+      if(Array.isArray(data.routes)) localStorage.setItem('kp_routes', JSON.stringify(data.routes));
+      return true;
+    }
+    return false;
+  }catch(e){
+    console.warn('Supabase config nav pieejams, izmanto lokālo kopiju:', e.message);
+    return false;
+  }
+}
+
+function sendProgressToCloud(done){
+  if(!session.groupName) return;
+
+  sb.from('mission_progress').upsert({
+    mission_id: MISSION_ID,
+    group_name: session.groupName,
+    route_idx: session.routeIdx,
+    done,
+    ts: Date.now(),
+    updated_at: new Date().toISOString()
+  }).then(({ error }) => {
+    if(error) console.warn('Progress netika nosūtīts Supabase:', error.message);
+  });
+}
+
+// ── STATE ──
+let curKp=null;
+let session={groupName:'',routeIdx:0};
+
+function getSession(){try{const s=localStorage.getItem('op_session');return s?JSON.parse(s):null}catch(e){return null}}
+function saveSession(){try{localStorage.setItem('op_session',JSON.stringify(session))}catch(e){}}
+function getKps(){try{const s=localStorage.getItem('kp_config');return s?JSON.parse(s):dflt()}catch(e){return dflt()}}
+function getRoutes(){try{const s=localStorage.getItem('kp_routes');return s?JSON.parse(s):null}catch(e){return null}}
+function getDone(){
+  const key='kp_done_'+session.groupName.replace(/\s+/g,'_')+'_r'+session.routeIdx;
+  try{return JSON.parse(localStorage.getItem(key)||'[]')}catch(e){return[]}
+}
+function saveDone(a){
+  const key='kp_done_'+session.groupName.replace(/\s+/g,'_')+'_r'+session.routeIdx;
+  try{localStorage.setItem(key,JSON.stringify(a))}catch(e){}
+  // Also save group progress for admin
+  saveGroupProgress(a);
+}
+function saveGroupProgress(done){
+  try{
+    const all=JSON.parse(localStorage.getItem('all_groups')||'{}');
+    all[session.groupName]={routeIdx:session.routeIdx,done:done,ts:Date.now()};
+    localStorage.setItem('all_groups',JSON.stringify(all));
+  }catch(e){}
+  sendProgressToCloud(done);
+}
+
+function dflt(){return[
+  {name:"KP 1",code:"1111",fragment:"47-A",hint:"Meklējiet šajā apkārtnē!",img:""},
+  {name:"KP 2",code:"2222",fragment:"83-B",hint:"Fragments paslēpts netālu.",img:""},
+  {name:"KP 3",code:"3333",fragment:"19-C",hint:"Lūkojieties uzmanīgi!",img:""},
+  {name:"KP 4",code:"4444",fragment:"62-D",hint:"Fragments ir 10 m rādiusā.",img:""},
+  {name:"KP 5",code:"5555",fragment:"35-E",hint:"Pārmeklējiet šo zonu.",img:""},
+  {name:"KP 6",code:"6666",fragment:"74-F",hint:"Fragments paslēpts tuvumā.",img:""},
+  {name:"KP 7",code:"7777",fragment:"28-G",hint:"Meklējiet!",img:""},
+  {name:"KP 8",code:"8888",fragment:"91-H",hint:"Fragments ir šeit netālu.",img:""},
+  {name:"KP 9",code:"9999",fragment:"56-I",hint:"Rūpīgi aplūkojiet apkārtni.",img:""},
+  {name:"KP 10",code:"0000",fragment:"13-J",hint:"Pēdējais fragments!",img:""}
+]}
+
+// Get KPs in route order
+function getRouteKps(){
+  const kps=getKps();
+  const routes=getRoutes();
+  if(!routes||!routes[session.routeIdx])return kps;
+  const order=routes[session.routeIdx].order;
+  return order.map(i=>kps[i]).filter(Boolean);
+}
+
+// ── SPLASH / SETUP ──
+async function initSplash(){
+  await loadRemoteConfig();
+  const routes=getRoutes();
+  const wrap=document.getElementById('route-btns');
+  wrap.innerHTML='';
+  const routeList=routes||[
+    {name:'Trase A',desc:'KP 1 → KP 10'},
+    {name:'Trase B',desc:'KP 10 → KP 1'}
+  ];
+  routeList.forEach((r,i)=>{
+    const btn=document.createElement('button');
+    btn.className='route-btn';
+    btn.dataset.idx=i;
+    btn.innerHTML=`<span class="route-name">${r.name}</span><span class="route-desc">${r.desc}</span>`;
+    btn.onclick=()=>{
+      document.querySelectorAll('.route-btn').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      session.routeIdx=i;
+    };
+    wrap.appendChild(btn);
+  });
+  // Check if returning session
+  const saved=getSession();
+  if(saved&&saved.groupName){
+    session=saved;
+    updateGroupTags();
+    showScreen('screen-home');
+  }
+}
+
+function startMission(){
+  const name=document.getElementById('group-name').value.trim();
+  const err=document.getElementById('splash-err');
+  const selected=document.querySelector('.route-btn.selected');
+  if(!name||!selected){err.style.display='block';return;}
+  err.style.display='none';
+  session.groupName=name;
+  session.routeIdx=parseInt(selected.dataset.idx);
+  saveSession();
+  updateGroupTags();
+  showScreen('screen-home');
+}
+
+function updateGroupTags(){
+  const routes=getRoutes();
+  const routeName=routes?routes[session.routeIdx].name:(['Trase A','Trase B'][session.routeIdx]||'Trase A');
+  const label=session.groupName+' · '+routeName;
+  ['home-group-tag','code-group-tag','frags-group-tag'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.textContent=label;
+  });
+}
+
+// ── SCREENS ──
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='screen-home')renderHome();
+  if(id==='screen-frags')renderFrags();
+}
+
+function goCode(){
+  const body=document.getElementById('code-body');
+  body.innerHTML=`
+    <p class="code-lbl">Kontrolpunkta kods</p>
+    <div class="code-row">
+      <input class="code-input" id="code-input" type="tel" maxlength="4" placeholder="••••" autocomplete="off" inputmode="numeric">
+      <button class="code-submit" onclick="submitCode()">→</button>
+    </div>
+    <div class="code-err" id="code-err"></div>
+    <p class="code-hint">Katram kontrolpunktam uz kartes ir lapiņa ar unikālu 4-ciparu kodu.</p>`;
+  document.getElementById('code-input').addEventListener('keydown',e=>{if(e.key==='Enter')submitCode()});
+  showScreen('screen-code');
+  setTimeout(()=>{const inp=document.getElementById('code-input');if(inp)inp.focus()},300);
+}
+
+function renderHome(){
+  const kps=getRouteKps();
+  const done=getDone();
+  document.getElementById('home-score').innerHTML=done.length+' <span style="font-size:12px;color:var(--text2);font-weight:400">/ '+kps.length+'</span>';
+  document.getElementById('home-progress').style.width=(done.length/kps.length*100)+'%';
+  const list=document.getElementById('kp-list');
+  list.innerHTML='';
+  kps.forEach((kp,i)=>{
+    const isDone=done.includes(i);
+    const isLocked=i>0&&!done.includes(i-1)&&!isDone;
+    const d=document.createElement('div');
+    d.className='kp-card'+(isDone?' done':isLocked?' locked':'');
+    d.onclick=()=>{
+      if(isDone)showDoneKp(i);
+      else if(!isLocked)goCode();
+    };
+    d.innerHTML=`<div class="kp-circle">${isDone?'✓':isLocked?'🔒':(i+1)}</div>
+      <div class="kp-info"><h3>${kp.name}</h3><p>${isDone?'✅ Fragments atrasts':isLocked?'Bloķēts':'⏳ Gaida izpildi'}</p>${isDone?`<span class="kp-chip">${kp.fragment}</span>`:''}</div>
+      <span class="kp-arrow">${isDone?'✓':isLocked?'':' ›'}</span>`;
+    list.appendChild(d);
+  });
+}
+
+function showDoneKp(i){
+  const kp=getRouteKps()[i];
+  const body=document.getElementById('code-body');
+  body.innerHTML=`<div class="done-box"><span class="ck">✅</span><div><p>Šis punkts jau izpildīts!</p><p>Fragments: <strong>${kp.fragment}</strong></p></div></div>`;
+  showScreen('screen-code');
+}
+
+function submitCode(){
+  const inp=document.getElementById('code-input');
+  if(!inp)return;
+  const val=inp.value.trim();
+  const kps=getRouteKps();
+  const idx=kps.findIndex(k=>k.code===val);
+  const err=document.getElementById('code-err');
+  if(idx===-1){
+    if(err){err.textContent='❌ Nepareizs kods. Pārbaudi lapiņu uz kartes.';err.style.display='block';}
+    inp.value='';inp.focus();
+    return;
+  }
+  const done=getDone();
+  if(done.includes(idx)){curKp=idx;showReveal(idx);return;}
+  if(idx>0&&!done.includes(idx-1)){
+    if(err){err.textContent='🔒 Vispirms jāizpilda KP '+idx+' — '+kps[idx-1].name+'!';err.style.display='block';}
+    inp.value='';inp.focus();
+    return;
+  }
+  if(err)err.style.display='none';
+  curKp=idx;
+  showReveal(idx);
+}
+
+function showReveal(i){
+  const kp=getRouteKps()[i];
+  document.getElementById('scan-wrap').style.display='block';
+  document.getElementById('rv-content').classList.remove('show');
+  showScreen('screen-reveal');
+  setTimeout(()=>{
+    document.getElementById('scan-wrap').style.display='none';
+    document.getElementById('rv-tag').textContent=kp.name;
+    document.getElementById('rv-caption').textContent=kp.hint||'Meklējiet šajā apkārtnē!';
+    const img=document.getElementById('rv-img'),ph=document.getElementById('rv-ph');
+    if(kp.img){img.src=kp.img;img.style.display='block';ph.style.display='none';}
+    else{img.style.display='none';ph.style.display='flex';}
+    document.getElementById('rv-found-btn').textContent=getDone().includes(i)?'✓ Jau atrasts':'✓ Fragments atrasts!';
+    document.getElementById('rv-content').classList.add('show');
+    const sl=document.querySelector('.scanline');
+    sl.style.animation='none';sl.offsetHeight;sl.style.animation='scandown 2s linear 1';
+  },1600);
+}
+
+function markFound(){
+  const done=getDone();
+  if(!done.includes(curKp)){done.push(curKp);saveDone(done);}
+  const kps=getRouteKps();
+  if(done.length===kps.length){
+    document.getElementById('final-sub').textContent='Visi '+kps.length+' fragmenti iegūti!\nNogādājiet kodu instruktoram.';
+    document.getElementById('final-code-val').textContent=kps.map(k=>k.fragment).join(' · ');
+    showScreen('screen-final');
+  } else {
+    showScreen('screen-home');
+  }
+}
+
+function renderFrags(){
+  const kps=getRouteKps(),done=getDone();
+  document.getElementById('frag-count').textContent=done.length+' no '+kps.length+' savākti';
+  const list=document.getElementById('frag-list');
+  list.innerHTML='';
+  kps.forEach((kp,i)=>{
+    const isDone=done.includes(i);
+    const d=document.createElement('div');
+    d.className='frag-row'+(isDone?' done':'');
+    d.innerHTML=`<div class="frag-left"><strong>${kp.name}</strong><span>KP ${i+1} no ${kps.length}</span></div>`+
+      (isDone?`<span class="frag-val">${kp.fragment}</span>`:`<span class="frag-empty">···</span>`);
+    list.appendChild(d);
+  });
+  const box=document.getElementById('full-code-box');
+  if(done.length===kps.length){
+    box.style.display='block';
+    document.getElementById('full-code-val').textContent=kps.map(k=>k.fragment).join(' · ');
+  } else box.style.display='none';
+}
+
+function resetGame(){
+  if(confirm('Sākt no jauna? Progress tiks dzēsts.')){
+    sendProgressToCloud([]);
+    const key='kp_done_'+session.groupName.replace(/\s+/g,'_')+'_r'+session.routeIdx;
+    localStorage.removeItem(key);
+    localStorage.removeItem('op_session');
+    session={groupName:'',routeIdx:0};
+    document.getElementById('group-name').value='';
+    document.querySelectorAll('.route-btn').forEach(b=>b.classList.remove('selected'));
+    showScreen('screen-splash');
+  }
+}
+
+// ── OFFLINE ──
+window.addEventListener('online',()=>document.getElementById('offline-badge').style.display='none');
+window.addEventListener('offline',()=>document.getElementById('offline-badge').style.display='block');
+if(!navigator.onLine)document.getElementById('offline-badge').style.display='block';
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+
+// ── INIT ──
+initSplash();
+</script>
+</body>
+</html>
