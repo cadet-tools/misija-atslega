@@ -523,14 +523,26 @@ function saveGroupProgress(done){
 }
 
 
+function hasLocalStudentProgress(){
+  const hasSession = !!localStorage.getItem('op_session');
+  const hasGroups = !!localStorage.getItem('all_groups');
+  const hasPending = !!localStorage.getItem('op_pending_progress');
+
+  const hasDone = Object.keys(localStorage).some(k =>
+    k.startsWith('kp_done_')
+  );
+
+  return hasSession || hasGroups || hasPending || hasDone;
+}
+
 function clearLocalStudentProgress(){
   Object.keys(localStorage)
-.filter(k =>
-  k.startsWith('kp_done_') ||
-  k === 'op_session' ||
-  k === 'all_groups' ||
-  k === 'op_pending_progress'
-)
+    .filter(k =>
+      k.startsWith('kp_done_') ||
+      k === 'op_session' ||
+      k === 'all_groups' ||
+      k === 'op_pending_progress'
+    )
     .forEach(k => localStorage.removeItem(k));
 
   session = {
@@ -541,6 +553,24 @@ function clearLocalStudentProgress(){
   curKp = null;
 }
 
+function resetStudentUiToSplash(showMessage){
+  const groupInput = document.getElementById('group-name');
+
+  if(groupInput){
+    groupInput.value = '';
+  }
+
+  document.querySelectorAll('.route-btn').forEach(b => {
+    b.classList.remove('selected');
+  });
+
+  showScreen('screen-splash');
+
+  if(showMessage){
+    alert('Instruktors atiestatīja spēli. Sāciet maršrutu no jauna.');
+  }
+}
+
 function applyRemoteResetToken(remoteToken){
   if(!remoteToken){
     return false;
@@ -548,24 +578,14 @@ function applyRemoteResetToken(remoteToken){
 
   const localToken = localStorage.getItem('op_reset_token');
 
-  if(localToken && localToken !== remoteToken){
+  const shouldReset =
+    (localToken && localToken !== remoteToken) ||
+    (!localToken && hasLocalStudentProgress());
+
+  if(shouldReset){
     clearLocalStudentProgress();
-
     localStorage.setItem('op_reset_token', remoteToken);
-
-    const groupInput = document.getElementById('group-name');
-    if(groupInput){
-      groupInput.value = '';
-    }
-
-    document.querySelectorAll('.route-btn').forEach(b => {
-      b.classList.remove('selected');
-    });
-
-    showScreen('screen-splash');
-
-    alert('Instruktors atiestatīja spēli. Sāciet maršrutu no jauna.');
-
+    resetStudentUiToSplash(true);
     return true;
   }
 
@@ -580,7 +600,7 @@ async function checkRemoteReset(){
   const client = getSupabaseClient();
 
   if(!client){
-    return;
+    return false;
   }
 
   try{
@@ -595,10 +615,13 @@ async function checkRemoteReset(){
     }
 
     if(data){
-      applyRemoteResetToken(data.reset_token);
+      return applyRemoteResetToken(data.reset_token);
     }
+
+    return false;
   }catch(e){
     console.warn('Neizdevās pārbaudīt reset statusu:', e.message);
+    return false;
   }
 }
   
@@ -824,9 +847,11 @@ function resetGame(){
 // ── OFFLINE ──
 window.addEventListener('online', async () => {
   document.getElementById('offline-badge').style.display = 'none';
-  await flushPendingProgress();
-  if(typeof checkRemoteReset === 'function'){
-    await checkRemoteReset();
+
+  const didReset = await checkRemoteReset();
+
+  if(!didReset){
+    await flushPendingProgress();
   }
 });
 
@@ -843,17 +868,39 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──
-initSplash().then(() => {
-  flushPendingProgress();
+initSplash().then(async () => {
+  const didReset = await checkRemoteReset();
+
+  if(!didReset){
+    await flushPendingProgress();
+  }
 });
 
-setInterval(() => {
-  flushPendingProgress();
+setInterval(async () => {
+  const didReset = await checkRemoteReset();
 
-  if(typeof checkRemoteReset === 'function'){
-    checkRemoteReset();
+  if(!didReset){
+    await flushPendingProgress();
   }
 }, 10000);
+
+document.addEventListener('visibilitychange', async () => {
+  if(!document.hidden){
+    const didReset = await checkRemoteReset();
+
+    if(!didReset){
+      await flushPendingProgress();
+    }
+  }
+});
+
+window.addEventListener('focus', async () => {
+  const didReset = await checkRemoteReset();
+
+  if(!didReset){
+    await flushPendingProgress();
+  }
+});
 </script>
 </body>
 </html>
