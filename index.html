@@ -101,8 +101,27 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rv-content.show{display:flex}
 .rv-tag{font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:var(--green);border:1px solid #1a4a2a;padding:3px 10px;border-radius:20px}
 .rv-title{font-size:15px;font-weight:700;text-align:center}
-.rv-img-wrap{width:100%;border-radius:var(--radius);overflow:hidden;border:2px solid #1a4a2a;position:relative}
-.rv-img{width:100%;display:block;max-height:42dvh;object-fit:cover}
+.rv-img-wrap{
+  width:100%;
+  border-radius:var(--radius);
+  overflow:hidden;
+  border:2px solid #1a4a2a;
+  position:relative;
+  background:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.rv-img{
+  display:block;
+  width:auto;
+  max-width:100%;
+  height:auto;
+  max-height:70dvh;
+  object-fit:contain;
+  background:#000;
+}
 .rv-placeholder{width:100%;height:180px;background:var(--surface2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text3)}
 .rv-placeholder span{font-size:32px}
 .rv-placeholder p{font-size:12px;text-align:center;line-height:1.4}
