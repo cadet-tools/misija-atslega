@@ -1036,11 +1036,57 @@ async function resetConfig(){
 }
 
 // ── INIT ──
+  let progressAutoRefreshTimer = null;
+let progressRefreshBusy = false;
+
+async function autoRefreshProgress(){
+  const progressTab = document.getElementById('tab-progress');
+
+  if(!progressTab || !progressTab.classList.contains('active')){
+    return;
+  }
+
+  if(progressRefreshBusy){
+    return;
+  }
+
+  progressRefreshBusy = true;
+
+  try{
+    await renderProgress();
+  }catch(e){
+    console.warn('Neizdevās automātiski atsvaidzināt progresu:', e.message);
+  }finally{
+    progressRefreshBusy = false;
+  }
+}
+
+function startProgressAutoRefresh(){
+  if(progressAutoRefreshTimer){
+    clearInterval(progressAutoRefreshTimer);
+  }
+
+  progressAutoRefreshTimer = setInterval(autoRefreshProgress, 5000);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden){
+    autoRefreshProgress();
+  }
+});
+
+window.addEventListener('focus', () => {
+  autoRefreshProgress();
+});
+
+
+  
 async function initAdmin(){
   await refreshAuthUi();
   await loadRemoteConfig();
   routeOrders=getRoutes().map(r=>Array.isArray(r.order)?[...r.order]:[]);
-  renderProgress();
+  await renderProgress();
+  startProgressAutoRefresh();
   await refreshAuthUi();
 }
 initAdmin();
